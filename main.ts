@@ -117,29 +117,30 @@ let orderCounter = 0;
 
 // ------------------------------------------------------------- parameters
 
-const MIN_AGE_SLOTS = 20; // let a coin prove it is not a one-slot wonder
-const MIN_REAL_QUOTE_SOL = 3; // real SOL in the curve, so an exit exists
-const MIN_WIN_TRADES = 8; // trades inside the flow window
+const MIN_AGE_SLOTS = 60; // let a coin prove it is not a one-slot wonder
+const MIN_REAL_QUOTE_SOL = 8; // deep curve only: real exit + bigger size cap
+const MIN_WIN_TRADES = 15; // trades inside the flow window
 const FLOW_WINDOW_SLOTS = 150; // ~1 minute of slots
-const MIN_BUY_SHARE = 0.58; // buy SOL share of flow inside the window
+const MIN_BUY_SHARE = 0.68; // buy SOL share of flow inside the window
 const MOM_FAST_SLOTS = 30;
-const MOM_FAST_MIN = 0.12; // +12% over the fast window
+const MOM_FAST_MIN = 0.08; // +8% over the fast window
 const MOM_SLOW_SLOTS = 120;
-const MOM_SLOW_MIN = 0.2; // +20% over the slow window
-const MOM_FAST_MAX = 1.2; // but not +120%: that top is someone else's exit
-const SIZE_FRACTION = 0.06; // of free cash per entry
-const SIZE_CAP_SOL = 0.35;
-const SIZE_MIN_SOL = 0.02;
-const MAX_POSITIONS = 8;
-const MAX_BUYS_PER_BATCH = 3;
-const HARD_STOP = 0.78; // sell everything at -22% of cost
-const TRAIL_ARM = 1.25; // trailing stop arms at +25%
-const TRAIL_DROP = 0.82; // and fires 18% below the peak ratio
-const TAKE_PROFIT = 2.1; // sell everything at +110%
-const PARTIAL_TP = 1.6; // sell half at +60%, let the rest ride the trail
-const TIME_STOP_SLOTS = 1800; // ~12 minutes
-const TIME_STOP_MAX_RATIO = 1.1; // still flat after that long: leave
-const COOLDOWN_SLOTS = 600;
+const MOM_SLOW_MIN = 0.25; // +25% over the slow window
+const MOM_FAST_MAX = 0.5; // but not +50%: that top is someone else's exit
+const MOM_SLOW_MAX = 1.0; // and not already doubled on the slow window
+const SIZE_FRACTION = 0.1; // of free cash per entry
+const SIZE_CAP_SOL = 0.5;
+const SIZE_MIN_SOL = 0.05;
+const MAX_POSITIONS = 3;
+const MAX_BUYS_PER_BATCH = 1;
+const HARD_STOP = 0.88; // sell everything at -12% of cost
+const TRAIL_ARM = 1.15; // trailing stop arms at +15%
+const TRAIL_DROP = 0.9; // and fires 10% below the peak ratio
+const TAKE_PROFIT = 1.8; // sell everything at +80%
+const PARTIAL_TP = 1.35; // sell half at +35%, let the rest ride the trail
+const TIME_STOP_SLOTS = 900; // ~6 minutes
+const TIME_STOP_MAX_RATIO = 1.05; // still flat after that long: leave
+const COOLDOWN_SLOTS = 1200;
 const BUY_SLIPPAGE_BPS = 800;
 const SELL_SLIPPAGE_BPS = 1500;
 const LAMPORTS = 1_000_000_000;
@@ -347,7 +348,7 @@ function decide(batch: BatchMsg): OrderOut[] {
       const fastRet = c.price / fast - 1;
       const slowRet = c.price / slow - 1;
       if (fastRet < MOM_FAST_MIN || fastRet > MOM_FAST_MAX) continue;
-      if (slowRet < MOM_SLOW_MIN) continue;
+      if (slowRet < MOM_SLOW_MIN || slowRet > MOM_SLOW_MAX) continue;
       candidates.push({ c, score: fastRet + slowRet });
     }
     candidates.sort((a, b) => b.score - a.score);
