@@ -119,29 +119,35 @@ let orderCounter = 0;
 
 const MIN_AGE_SLOTS = 60; // let a coin prove it is not a one-slot wonder
 const MIN_REAL_QUOTE_SOL = 8; // deep curve only: real exit + bigger size cap
-const MIN_WIN_TRADES = 15; // trades inside the flow window
+const MIN_WIN_TRADES = 12; // trades inside the flow window
 const FLOW_WINDOW_SLOTS = 150; // ~1 minute of slots
-const MIN_BUY_SHARE = 0.68; // buy SOL share of flow inside the window
+const MIN_BUY_SHARE = 0.62; // buyers absorbing the dip inside the window
+// Dip-buying (iteration 2): momentum chasing bought local tops (win rate
+// stuck ~0.30 at every strictness), so entries now buy the dip instead —
+// a sharp fast-window drop in a coin whose slow trend is intact and whose
+// bleeding has stopped on the micro window.
 const MOM_FAST_SLOTS = 30;
-const MOM_FAST_MIN = 0.08; // +8% over the fast window
+const DIP_FAST_MIN = -0.35; // not a total collapse
+const DIP_FAST_MAX = -0.08; // but a real dip: at least -8% fast
 const MOM_SLOW_SLOTS = 120;
-const MOM_SLOW_MIN = 0.25; // +25% over the slow window
-const MOM_FAST_MAX = 0.5; // but not +50%: that top is someone else's exit
-const MOM_SLOW_MAX = 1.0; // and not already doubled on the slow window
+const DIP_SLOW_MIN = -0.1; // slow trend not in freefall
+const DIP_SLOW_MAX = 0.6; // and not already mooned on the slow window
+const MOM_MICRO_SLOTS = 10;
+const MICRO_MIN = -0.03; // bleeding stopped: no worse than -3% over 10 slots
 const SIZE_FRACTION = 0.1; // of free cash per entry
 const SIZE_CAP_SOL = 0.5;
 const SIZE_MIN_SOL = 0.05;
 const MAX_POSITIONS = 3;
 const MAX_BUYS_PER_BATCH = 1;
-const HARD_STOP = 0.88; // sell everything at -12% of cost
-const TRAIL_ARM = 1.15; // trailing stop arms at +15%
-const TRAIL_DROP = 0.9; // and fires 10% below the peak ratio
-const TAKE_PROFIT = 1.8; // sell everything at +80%
-const PARTIAL_TP = 1.35; // sell half at +35%, let the rest ride the trail
+const HARD_STOP = 0.9; // sell everything at -10% of cost
+const TRAIL_ARM = 1.3; // trailing stop arms at +30%
+const TRAIL_DROP = 0.88; // and fires 12% below the peak ratio
+const TAKE_PROFIT = 1.6; // sell everything at +60%
+const PARTIAL_TP = 1.25; // sell half at +25%, let the rest ride the trail
 const TIME_STOP_SLOTS = 900; // ~6 minutes
-const TIME_STOP_MAX_RATIO = 1.05; // still flat after that long: leave
+const TIME_STOP_MAX_RATIO = 1.03; // still flat after that long: leave
 const COOLDOWN_SLOTS = 1200;
-const BUY_SLIPPAGE_BPS = 800;
+const BUY_SLIPPAGE_BPS = 1200;
 const SELL_SLIPPAGE_BPS = 1500;
 const LAMPORTS = 1_000_000_000;
 
@@ -344,12 +350,17 @@ function decide(batch: BatchMsg): OrderOut[] {
       if (flow <= 0 || buySol / flow < MIN_BUY_SHARE) continue;
       const fast = priceBack(c, slot, MOM_FAST_SLOTS);
       const slow = priceBack(c, slot, MOM_SLOW_SLOTS);
-      if (fast === null || slow === null || fast <= 0 || slow <= 0) continue;
+      const micro = priceBack(c, slot, MOM_MICRO_SLOTS);
+      if (fast === null || slow === null || micro === null) continue;
+      if (fast <= 0 || slow <= 0 || micro <= 0) continue;
       const fastRet = c.price / fast - 1;
       const slowRet = c.price / slow - 1;
-      if (fastRet < MOM_FAST_MIN || fastRet > MOM_FAST_MAX) continue;
-      if (slowRet < MOM_SLOW_MIN || slowRet > MOM_SLOW_MAX) continue;
-      candidates.push({ c, score: fastRet + slowRet });
+      const microRet = c.price / micro - 1;
+      if (fastRet < DIP_FAST_MIN || fastRet > DIP_FAST_MAX) continue;
+      if (slowRet < DIP_SLOW_MIN || slowRet > DIP_SLOW_MAX) continue;
+      if (microRet < MICRO_MIN) continue;
+      // Score: prefer the deepest healthy dip in the strongest slow trend.
+      candidates.push({ c, score: slowRet - fastRet });
     }
     candidates.sort((a, b) => b.score - a.score);
     for (const { c } of candidates) {
